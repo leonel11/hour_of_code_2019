@@ -40,8 +40,7 @@ class TextClassifier(object):
             return
         if self._model is not None:
             print('Saving model')
-            self._model.save_weights(
-                os.path.join(model_path, 'model_weights.h5'))
+            self._model.save(os.path.join(model_path, 'model.h5'))
         if self._tokenizer is not None:
             print('Saving tokenizer')
             with open(os.path.join(model_path, 'tokenizer.pickle'),
@@ -51,7 +50,9 @@ class TextClassifier(object):
                             protocol=pickle.HIGHEST_PROTOCOL)
 
     def load(self, model_path: str):
-        self._model = load_model(model_path)
+        self._model = load_model(f'{model_path}/model.h5')
+        with open(f'{model_path}/tokenizer.pickle', 'rb') as model:
+            self._tokenizer = pickle.load(model)
 
     def fit(self,
             X_train,

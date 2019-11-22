@@ -1,5 +1,6 @@
 import sys
 import fire
+import numpy as np
 from sklearn.metrics import roc_auc_score
 from utils.data_handler import DataHandler
 from utils.text_classifier import TextClassifier
@@ -66,17 +67,20 @@ class Nlp(object):
         It tests entered comments for abusiveness
         """
         tc = TextClassifier()
+        print(f'Loading model from {model_path}')
         tc.load(model_path)
         print(
             'Enter a message and I will tell you whether it is abusive or not')
         print('To exit, please, press Ctrl+C')
         while True:
-            for comment in sys.stdin.readline():
-                print(
-                    tc.predict_proba(comment,
-                                     num_words=num_words,
-                                     sequence_length=max_comment_length,
-                                     batch_size=1))
+            comment = input('--> ')
+            print(comment)
+            print(
+                'Prediction:',
+                tc.predict_proba(np.array([comment]),
+                                    num_words=num_words,
+                                    sequence_length=max_comment_length,
+                                    batch_size=1))
 
 
 def main():
