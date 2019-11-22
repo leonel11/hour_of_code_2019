@@ -19,23 +19,22 @@ You will need the following things properly installed on your computer.
     ```bash
     nvidia-docker build -t sm_keras_tf_py3:gpu .
     ```
-    Run container
+    Run container (run this command in the same directory where Dockerfile is)
     ```bash
-    nvidia-docker run --user $(id -u):$(id -g) -v $PWD/src:/bowl_2019 -dt --name sm_hoc -m 50GB sm_keras_tf_py3:gpu /bin/bash
+    nvidia-docker run --user $(id -u):$(id -g) -dt --name sm_hoc -m 50GB -v $(pwd)/src:/$(basename $(pwd)) -w /$(basename $(pwd)) sm_keras_tf_py3:gpu /bin/bash
     ```
-3. Training
+3. Cleaning dataset
+    ```bash
+    nvidia-docker exec --env CUDA_VISIBLE_DEVICES='0' sm_hoc python3 -u nlp.py prepare-data
+    ```
+4. Training
 
     By default, only the 0th GPU is visible for the docker container. You can change this by passing `--env` option to `exec`. For example:
     ```bash
-    nvidia-docker exec --env CUDA_VISIBLE_DEVICES='0,1' sm_hoc python3 -u train.py
+    nvidia-docker exec --env CUDA_VISIBLE_DEVICES='0' sm_hoc python3 -u nlp.py train --data-path ./processed_data 
     ```
     This will start training on 0th, 1st and 2nd GPUs.
 
 ## Advices
 
 You can add some custom stop words. They must be placed in `~src/data/stopwords.txt` file (one word per line).
-
-You can create some files with useful information about training data
-```bash
-nvidia-docker exec ycc python3 info.py
-```

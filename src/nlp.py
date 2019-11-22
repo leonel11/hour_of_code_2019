@@ -1,7 +1,11 @@
 import sys
 import fire
+from sklearn.metrics import roc_auc_score
 from utils.data_handler import DataHandler
 from utils.text_classifier import TextClassifier
+
+NUM_WORDS = 300000
+MAX_COMMENT_LENGTH = 220
 
 
 class Nlp(object):
@@ -26,17 +30,18 @@ class Nlp(object):
     def train(self,
               data_path: str,
               model_path: str = None,
-              glove_path: str = r'./data/glove.840B.300d',
+              glove_path: str = r'./data/glove.840B.300d.txt',
               embedding_dim: int = 300,
-              num_words: int = 180000,
-              max_comment_length: int = 150,
+              num_words: int = NUM_WORDS,
+              max_comment_length: int = MAX_COMMENT_LENGTH,
               epochs: int = 10,
-              batch_size: int = 256) -> None:
+              batch_size: int = 512) -> None:
         """
         It trains a model
         """
-        tc = TextClassifier()
+        print(f'Loading data from {data_path}')
         dh = DataHandler(data_path)
+        tc = TextClassifier()
         tc.fit(dh.X_train,
                dh.y_train,
                num_words=num_words,
@@ -46,17 +51,32 @@ class Nlp(object):
                validation_data=(dh.X_val, dh.y_val),
                epochs=epochs,
                batch_size=batch_size)
-        print(tc.evaluate(dh.X_test, dh.y_test, batch_size))
         tc.save(model_path)
+        preds = tc.predict_proba(dh.X_test,
+                                 num_words=num_words,
+                                 sequence_length=max_comment_length,
+                                 batch_size=batch_size)
+        print('ROC_AUC score for test data:', roc_auc_score(dh.y_test, preds))
 
-    def test(self, model_path: str) -> None:
+    def test(self,
+             model_path: str,
+             num_words: int = NUM_WORDS,
+             max_comment_length: int = MAX_COMMENT_LENGTH) -> None:
+        """
+        It tests entered comments for abusiveness
+        """
         tc = TextClassifier()
         tc.load(model_path)
-        print('Enter a message and I will tell you whether it is offensive or not')
+        print(
+            'Enter a message and I will tell you whether it is abusive or not')
         print('To exit, please, press Ctrl+C')
         while True:
             for comment in sys.stdin.readline():
-                print(tc.predict_proba(comment, 1))
+                print(
+                    tc.predict_proba(comment,
+                                     num_words=num_words,
+                                     sequence_length=max_comment_length,
+                                     batch_size=1))
 
 
 def main():

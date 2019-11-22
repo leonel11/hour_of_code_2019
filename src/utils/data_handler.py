@@ -47,15 +47,15 @@ class DataHandler():
 
     @property
     def X_train(self) -> pd.DataFrame:
-        return self._X_train
+        return self._X_train['comment_text']
 
     @property
     def X_val(self) -> pd.DataFrame:
-        return self._X_val
+        return self._X_val['comment_text']
 
     @property
     def X_test(self) -> pd.DataFrame:
-        return self._X_test
+        return self._X_test['comment_text']
 
     @property
     def y_train(self) -> pd.DataFrame:

@@ -1,7 +1,5 @@
 FROM nvcr.io/nvidia/tensorflow:19.09-py3
 
-VOLUME ["/hour_of_code_2019"]
-
 # Run the copied file and install some dependencies
 RUN apt update -qq && \
     apt install --no-install-recommends -y \
@@ -18,7 +16,6 @@ RUN apt update -qq && \
     python3-pydot && \
     apt clean && \
     rm -rf /var/lib/apt/lists/* && \
-    chmod +x /bowl_2019 && \
     python3 -m pip --no-cache-dir install --upgrade \
     cython \
     h5py \
@@ -51,5 +48,4 @@ RUN apt update -qq && \
 RUN mkdir -p /etc/OpenCL/vendors && \
     echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
 
-WORKDIR /hour_of_code_2019
 ENV CUDA_VISIBLE_DEVICES 0

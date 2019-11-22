@@ -2,6 +2,9 @@
 Model dispatcher
 """
 import os
+# Supressing tf warnings
+import warnings
+warnings.filterwarnings('ignore', category=FutureWarning)
 try:
     import cPickle as pickle
 except ImportError:
@@ -14,15 +17,15 @@ from keras import regularizers
 from keras import initializers
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from keras.models import Model, load_model
-from keras.layers import (Dense, CuDNNLSTM, Bidirectional, Dropout, Input,
-                          SpatialDropout1D, GlobalAveragePooling1D,
-                          GlobalMaxPooling1D, MaxPooling1D, concatenate)
+from keras.layers import (Dense, CuDNNLSTM, CuDNNGRU, Bidirectional, Dropout,
+                          Input, SpatialDropout1D, GlobalAveragePooling1D,
+                          GlobalMaxPooling1D, MaxPooling1D, concatenate, add)
 from keras.layers.embeddings import Embedding
 from keras.optimizers import Adam
 from keras.utils import multi_gpu_model, plot_model
 import numpy as np
 import matplotlib.pyplot as plt
-import constants
+from utils import constants
 
 
 class TextClassifier(object):
@@ -39,7 +42,13 @@ class TextClassifier(object):
             print('Saving model')
             self._model.save_weights(
                 os.path.join(model_path, 'model_weights.h5'))
-        pass
+        if self._tokenizer is not None:
+            print('Saving tokenizer')
+            with open(os.path.join(model_path, 'tokenizer.pickle'),
+                      'wb') as handle:
+                pickle.dump(self._tokenizer,
+                            handle,
+                            protocol=pickle.HIGHEST_PROTOCOL)
 
     def load(self, model_path: str):
         self._model = load_model(model_path)
@@ -56,7 +65,9 @@ class TextClassifier(object):
             batch_size=None) -> None:
         self._tokenizer = Tokenizer(num_words, oov_token=True)
         self._tokenizer.fit_on_texts(X_train)
+        X_val, y_val = validation_data
         X_train = self._text2vec(X_train, num_words, sequence_length)
+        X_val = self._text2vec(X_val, num_words, sequence_length)
         parallel_model, self._model = self._lstm(num_words, sequence_length,
                                                  glove_path, embedding_dim)
         print('Training model')
@@ -70,28 +81,28 @@ class TextClassifier(object):
         ]
         self._history = parallel_model.fit(X_train,
                                            y_train,
-                                           validation_data=validation_data,
+                                           validation_data=(X_val, y_val),
                                            epochs=epochs,
                                            batch_size=batch_size,
                                            callbacks=callbacks)
 
-    def predict_proba(self, x, batch_size=None) -> np.ndarray:
+    def predict_proba(self, x, num_words, sequence_length,
+                      batch_size=None) -> np.ndarray:
+        x = self._text2vec(x, num_words, sequence_length)
         return self._model.predict(x, batch_size=batch_size)
-
-    def evaluate(self, x, y, batch_size=None):
-        """
-        Returns the loss value & metrics values for the model in test mode.
-        """
-        return self._model.evaluate(x, y, batch_size)
 
     @staticmethod
     def _get_model_path(history, model_path: str = None) -> str:
-        model_path = os.path.join(
-            constants.MODELS_PATH, 'lstm_{:.4f}_{:.4f}'.format(
-                history.history['val_loss'][-1] if 'val_loss' in history.history
-                else history.history['loss'][-1],
-                history.history['val_acc'][-1] if 'val_acc' in history.history
-                else history.history['acc'][-1]))
+        if 'val_loss' in history.history:
+            loss = history.history['val_loss'][-1]
+        else:
+            loss = history.history['loss'][-1]
+        if 'val_binary_accuracy' in history.history:
+            acc = history.history['val_binary_accuracy'][-1]
+        else:
+            acc = history.history['binary_accuracy'][-1]
+        model_path = os.path.join(constants.MODELS_PATH,
+                                  'lstm_{:.4f}_{:.4f}'.format(loss, acc))
         return model_path
 
     @staticmethod
@@ -102,7 +113,7 @@ class TextClassifier(object):
         return list(map(int, gpus.split(',')))
 
     @staticmethod
-    def _load_txt_model(model_path) -> Dict:
+    def _load_txt_model(model_path: str, vector_size: int) -> Dict:
         """
         Returns pretrained serialized model saved in text format
         where numbers are separated with spaces
@@ -115,16 +126,15 @@ class TextClassifier(object):
             with open(pickled_model, 'rb') as model:
                 return pickle.load(model)
         except:
-            os.makedirs(os.path.dirname(model_path), exist_ok=True)
+            os.makedirs(os.path.dirname(pickled_model), exist_ok=True)
             # form text model
             with open(model_path, 'r') as file:
                 model = {}
                 for line in file:
-                    splitLine = line.split()
-                    # pull word
-                    word = splitLine[0]
-                    # pull features
-                    embedding = np.array([float(val) for val in splitLine[1:]])
+                    split_line = line.split()
+                    word = " ".join(split_line[0:len(split_line) - vector_size])
+                    embedding = np.array(
+                        [float(val) for val in split_line[-vector_size:]])
                     model[word] = embedding
                 with open(pickled_model, 'wb') as handle:
                     pickle.dump(model, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -137,8 +147,8 @@ class TextClassifier(object):
         """
         plt.gcf().clear()
         # summarize history for accuracy
-        plt.plot(history.history['acc'])
-        plt.plot(history.history['val_acc'])
+        plt.plot(history.history['binary_accuracy'])
+        plt.plot(history.history['val_binary_accuracy'])
         plt.title('model accuracy')
         plt.ylabel('accuracy')
         plt.xlabel('epoch')
@@ -161,15 +171,15 @@ class TextClassifier(object):
                    show_shapes=True)
         self._plot_loss_acc(history, model_path)
 
-    def _text2vec(self, X_train, num_words, max_comment_length):
-        X_train_seq = []
-        for seq in self._tokenizer.texts_to_sequences_generator(X_train):
-            X_train_seq.append(seq)
+    def _text2vec(self, strings, num_words, max_comment_length):
+        strings_seq = []
+        for seq in self._tokenizer.texts_to_sequences_generator(strings):
+            strings_seq.append(seq)
         # Truncate and pad input sequences
-        X_train_seq = sequence.pad_sequences(
-            self._tokenizer.texts_to_sequences(X_train),
+        strings_seq = sequence.pad_sequences(
+            self._tokenizer.texts_to_sequences(strings),
             maxlen=max_comment_length)
-        return X_train_seq
+        return strings_seq
 
     def _lstm(self, top_words: int, sequence_length: int, glove_path: str,
               embedding_dim: int):
@@ -178,29 +188,22 @@ class TextClassifier(object):
         Params:
         - top_words - load the dataset but only keep the top n words, zero the rest
         """
-        units = 256
-        inputs = Input(shape=(sequence_length,), dtype='int32')
+        units = 128
+        inputs = Input(shape=(None,))
         x = self._get_pretrained_embedding(top_words, sequence_length,
                                            glove_path, embedding_dim)(inputs)
         x = SpatialDropout1D(0.2)(x)
         # For mor detais about kernel_constraint - see chapter 5.1
         # in http://www.cs.toronto.edu/~rsalakhu/papers/srivastava14a.pdf
-        x = Bidirectional(CuDNNLSTM(
-            units,
-            kernel_initializer=initializers.he_uniform(),
-            recurrent_regularizer=regularizers.l2(),
-            return_sequences=True),
-                          merge_mode='concat')(x)
-        x = Bidirectional(CuDNNLSTM(
-            units,
-            kernel_initializer=initializers.he_uniform(),
-            recurrent_regularizer=regularizers.l2(),
-            return_sequences=True),
-                          merge_mode='concat')(x)
-        avg_pool = GlobalAveragePooling1D()(x)
-        max_pool = GlobalMaxPooling1D()(x)
-        x = concatenate([avg_pool, max_pool])
-        output = Dense(6, activation='sigmoid')(x)
+        x = Bidirectional(CuDNNGRU(units, return_sequences=True))(x)
+        x = Bidirectional(CuDNNLSTM(units, return_sequences=True))(x)
+        hidden = concatenate([
+            GlobalMaxPooling1D()(x),
+            GlobalAveragePooling1D()(x),
+        ])
+        hidden = add([hidden, Dense(4 * units, activation='relu')(hidden)])
+        hidden = add([hidden, Dense(4 * units, activation='relu')(hidden)])
+        output = Dense(1, activation='sigmoid')(hidden)
         gpus = self._get_gpus(os.environ['CUDA_VISIBLE_DEVICES'])
         if len(gpus) == 1:
             with K.tf.device('/gpu:{}'.format(gpus[0])):
@@ -212,8 +215,8 @@ class TextClassifier(object):
                 model = Model(inputs, output)
             parallel_model = multi_gpu_model(model, gpus=gpus)
         parallel_model.compile(loss='binary_crossentropy',
-                               optimizer=Adam(lr=1e-3),
-                               metrics=['accuracy'])
+                               optimizer=Adam(learning_rate=0.001),
+                               metrics=['binary_accuracy'])
         return parallel_model, model
 
     def _get_pretrained_embedding(self, top_words: int, sequence_length: int,
@@ -223,7 +226,7 @@ class TextClassifier(object):
         """
         word_vectors = {}
         if glove_path is not None:
-            word_vectors = self._load_txt_model(glove_path)
+            word_vectors = self._load_txt_model(glove_path, embedding_dim)
         else:
             return Embedding(input_dim=top_words,
                              output_dim=embedding_dim,
