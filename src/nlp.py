@@ -43,6 +43,7 @@ class Nlp(object):
         print(f'Loading data from {data_path}')
         dh = DataHandler(data_path)
         tc = TextClassifier()
+        print('Fitting to data')
         tc.fit(dh.X_train,
                dh.y_train,
                num_words=num_words,
@@ -61,26 +62,38 @@ class Nlp(object):
 
     def test(self,
              model_path: str,
+             comment: str = None,
              num_words: int = NUM_WORDS,
              max_comment_length: int = MAX_COMMENT_LENGTH) -> None:
         """
         It tests entered comments for abusiveness
         """
-        tc = TextClassifier()
-        print(f'Loading model from {model_path}')
-        tc.load(model_path)
-        print(
-            'Enter a message and I will tell you whether it is abusive or not')
-        print('To exit, please, press Ctrl+C')
-        while True:
-            comment = input('--> ')
-            print(comment)
+
+        def predict(comment: str):
+            comment = dh.clean_comment(comment)
             print(
                 'Prediction:',
                 tc.predict_proba(np.array([comment]),
-                                    num_words=num_words,
-                                    sequence_length=max_comment_length,
-                                    batch_size=1))
+                                 num_words=num_words,
+                                 sequence_length=max_comment_length,
+                                 batch_size=1))
+
+        tc = TextClassifier()
+        dh = DataHandler()
+        print(f'Loading model from {model_path}')
+        tc.load(model_path)
+        if comment is not None:
+            predict(dh.clean_comment(comment))
+        else:
+            try:
+                print('Enter a message. '
+                    'I will tell you whether it is abusive or not')
+                print('To exit, please, press Ctrl+C')
+                while True:
+                    comment = input('--> ')
+                    predict(dh.clean_comment(comment))
+            except KeyboardInterrupt:
+                return
 
 
 def main():

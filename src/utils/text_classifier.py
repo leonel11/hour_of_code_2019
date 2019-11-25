@@ -17,8 +17,8 @@ from keras import regularizers
 from keras import initializers
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from keras.models import Model, load_model
-from keras.layers import (Dense, CuDNNLSTM, CuDNNGRU, Bidirectional, Dropout,
-                          Input, SpatialDropout1D, GlobalAveragePooling1D,
+from keras.layers import (Dense, GRU, LSTM, Bidirectional, Dropout, Input,
+                          SpatialDropout1D, GlobalAveragePooling1D,
                           GlobalMaxPooling1D, MaxPooling1D, concatenate, add)
 from keras.layers.embeddings import Embedding
 from keras.optimizers import Adam
@@ -64,7 +64,7 @@ class TextClassifier(object):
             validation_data=None,
             epochs=1,
             batch_size=None) -> None:
-        self._tokenizer = Tokenizer(num_words, oov_token=True)
+        self._tokenizer = Tokenizer(num_words)
         self._tokenizer.fit_on_texts(X_train)
         X_val, y_val = validation_data
         X_train = self._text2vec(X_train, num_words, sequence_length)
@@ -196,8 +196,8 @@ class TextClassifier(object):
         x = SpatialDropout1D(0.2)(x)
         # For mor detais about kernel_constraint - see chapter 5.1
         # in http://www.cs.toronto.edu/~rsalakhu/papers/srivastava14a.pdf
-        x = Bidirectional(CuDNNGRU(units, return_sequences=True))(x)
-        x = Bidirectional(CuDNNLSTM(units, return_sequences=True))(x)
+        x = Bidirectional(GRU(units, return_sequences=True))(x)
+        x = Bidirectional(LSTM(units, return_sequences=True))(x)
         hidden = concatenate([
             GlobalMaxPooling1D()(x),
             GlobalAveragePooling1D()(x),
@@ -250,5 +250,4 @@ class TextClassifier(object):
                          output_dim=embedding_dim,
                          input_length=sequence_length,
                          weights=[embedding_matrix],
-                         trainable=False,
-                         mask_zero=False)
+                         trainable=False)

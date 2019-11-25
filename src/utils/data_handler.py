@@ -14,13 +14,14 @@ import pandas as pd
 
 class DataHandler():
 
-    def __init__(self, data_path: str, stop_words_path: str = None):
-        self._X_train = pd.read_csv(f'{data_path}/X_train.csv')
-        self._X_val = pd.read_csv(f'{data_path}/X_val.csv')
-        self._X_test = pd.read_csv(f'{data_path}/X_test.csv')
-        self._y_train = pd.read_csv(f'{data_path}/y_train.csv', header=None)
-        self._y_val = pd.read_csv(f'{data_path}/y_val.csv', header=None)
-        self._y_test = pd.read_csv(f'{data_path}/y_test.csv', header=None)
+    def __init__(self, data_path: str = None, stop_words_path: str = None):
+        if data_path is not None:
+            self._X_train = pd.read_csv(f'{data_path}/X_train.csv')
+            self._X_val = pd.read_csv(f'{data_path}/X_val.csv')
+            self._X_test = pd.read_csv(f'{data_path}/X_test.csv')
+            self._y_train = pd.read_csv(f'{data_path}/y_train.csv', header=None)
+            self._y_val = pd.read_csv(f'{data_path}/y_val.csv', header=None)
+            self._y_test = pd.read_csv(f'{data_path}/y_test.csv', header=None)
         if stop_words_path is not None:
             self._stop_words = set(open(stop_words_path).read().split())
         else:
@@ -36,14 +37,12 @@ class DataHandler():
             flags=re.UNICODE)
         self._all_punct_pattern = re.compile(
             '[%s]' % re.escape(string.punctuation.replace('\'', '')))
-        self._marks = {r'[\s]+.': '. ', r',': ', ', r'?': '? ', r'!': '! '}
         self._punctuation = set(
             string.punctuation)  # string of ASCII punctuation
         self._exclamation_token = ' exclmrk '
         self._question_token = ' qstmrk '
-        self._dollar_token = ' dlrmrk '
+        self._dot_token = ' eosmkr '
         self._hash_token = ' hshmrk '
-        self._at_token = ' atmrk '
 
     @property
     def X_train(self) -> pd.DataFrame:
@@ -72,7 +71,7 @@ class DataHandler():
     def prepare_data(self, cpus: int = None):
 
         def process(series):
-            return u'\"{}\"'.format(self._clean_comment(series['comment_text']))
+            return u'\"{}\"'.format(self.clean_comment(series['comment_text']))
 
         def call_process(df):
             return df.apply(process, axis=1)
@@ -107,7 +106,7 @@ class DataHandler():
                             index=False,
                             header=False)
 
-    def _clean_comment(self, comment: str) -> str:
+    def clean_comment(self, comment: str) -> str:
         """
         Cleans comment
         Returns clean comment string in utf-8.
@@ -119,7 +118,6 @@ class DataHandler():
         clean_comment = self._remove_urls(comment)
         clean_comment = self._remove_emojis(clean_comment)
         clean_comment = self._standardize_words(clean_comment)
-        # clean_comment = self._remove_stop_words(clean_comment)
         clean_comment = self._remove_punctuation(clean_comment)
         clean_comment = self._remove_digits(clean_comment)
         # clean_comment = self._remove_stop_words(clean_comment)
@@ -147,8 +145,10 @@ class DataHandler():
         Removes all punctuations except !?,.'.
         Returns clean comment
         """
+        comment = comment.replace("$", "s")
+        comment = comment.replace("@", "a")
         # removes other punctuation
-        new_comment = re.sub(r"[^\w\s!?,.'$#@]", ' ', comment)
+        new_comment = re.sub(r"[^\w\s!?.'$#@]", ' ', comment)
         # removes duplicate punctuation
         new_comment = re.sub(r"([\s,.'])\1+", r'\1', new_comment)
         # remove spaces before punctuation
@@ -219,9 +219,8 @@ class DataHandler():
                                    comment: str,
                                    exclamation=True,
                                    question=True,
-                                   dollar=True,
                                    hash_mrk=True,
-                                   at=True) -> str:
+                                   eos_mrk=True) -> str:
         """
         '!' -> 'exclmrk', '?' -> 'qstmrk'
         Returns clean comment
@@ -231,10 +230,8 @@ class DataHandler():
             new_comment = new_comment.replace('!', self._exclamation_token)
         if question:
             new_comment = new_comment.replace('?', self._question_token)
-        if dollar:
-            new_comment = new_comment.replace('$', self._dollar_token)
+        if eos_mrk:
+            new_comment = new_comment.replace('.', self._dot_token)
         if hash_mrk:
             new_comment = new_comment.replace('#', self._hash_token)
-        if at:
-            new_comment = new_comment.replace('@', self._at_token)
         return new_comment
