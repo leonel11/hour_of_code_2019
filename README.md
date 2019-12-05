@@ -33,7 +33,6 @@ You will need the following things properly installed on your computer.
     ```bash
     nvidia-docker exec --env CUDA_VISIBLE_DEVICES='0' sm_hoc python3 -u nlp.py train --data-path ./processed_data 
     ```
-    This will start training on 0th, 1st and 2nd GPUs.
 
 ## Advices
 
