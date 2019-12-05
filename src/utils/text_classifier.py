@@ -173,10 +173,6 @@ class TextClassifier(object):
         self._plot_loss_acc(history, model_path)
 
     def _text2vec(self, strings, num_words, max_comment_length):
-        strings_seq = []
-        for seq in self._tokenizer.texts_to_sequences_generator(strings):
-            strings_seq.append(seq)
-        # Truncate and pad input sequences
         strings_seq = sequence.pad_sequences(
             self._tokenizer.texts_to_sequences(strings),
             maxlen=max_comment_length)
